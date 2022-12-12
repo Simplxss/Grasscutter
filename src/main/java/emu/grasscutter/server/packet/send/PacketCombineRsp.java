@@ -45,9 +45,9 @@ public class PacketCombineRsp extends BasePacket {
                 .setAvatarGuid(combineReq.getAvatarGuid())
                 .addAllCostItemList(costItemList)
                 .addAllResultItemList(resultItemList)
-                .addAllTotalRandomItemList(totalRandomItemList)
-                .addAllTotalReturnItemList(totalReturnItemList)
-                .addAllTotalExtraItemList(totalExtraItemList)
+//                .addAllTotalRandomItemList(totalRandomItemList)
+//                .addAllTotalReturnItemList(totalReturnItemList)
+//                .addAllTotalExtraItemList(totalExtraItemList)
                 .build();
 
         this.setData(proto);
