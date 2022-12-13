@@ -61,7 +61,8 @@ public class PacketGetAllMailRsp extends BasePacket {
                                 mailData.setImportance(message.importance);
                                 mailData.setIsRead(message.isRead);
                                 mailData.setIsAttachmentGot(message.isAttachmentGot);
-                                mailData.setConfigId(1);
+                                // mailData.setConfigId(1);
+                                mailData.setCollectStateValue(1);
 
                                 mailDataList.add(mailData.build());
                             }
