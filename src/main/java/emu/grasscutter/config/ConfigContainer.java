@@ -165,9 +165,9 @@ public class ConfigContainer {
     /* Data containers. */
 
     public static class Dispatch {
-        public Region[] regions = {};
+        public Region[] regions;
 
-        public Resource[] resources = {};
+        public JsonObject resources;
 
         public String defaultName = "Grasscutter";
 
@@ -316,8 +316,6 @@ public class ConfigContainer {
     }
 
     public static class Resource {
-        public String version = "";
-
         public String resourceUrl = "";
         public String dataUrl = "";
         public String resourceUrlBak = "";

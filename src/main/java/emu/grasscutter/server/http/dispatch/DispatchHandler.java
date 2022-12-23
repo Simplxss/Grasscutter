@@ -3,15 +3,17 @@ package emu.grasscutter.server.http.dispatch;
 import com.google.protobuf.ByteString;
 import emu.grasscutter.Grasscutter;
 import emu.grasscutter.Grasscutter.ServerRunMode;
+import emu.grasscutter.net.proto.QueryRegionListHttpRspOuterClass.QueryRegionListHttpRsp;
 import emu.grasscutter.net.proto.QueryCurrRegionHttpRspOuterClass.QueryCurrRegionHttpRsp;
-import emu.grasscutter.net.proto.RegionInfoOuterClass.RegionInfo;
 import emu.grasscutter.net.proto.RegionSimpleInfoOuterClass.RegionSimpleInfo;
 import emu.grasscutter.net.proto.ResVersionConfigOuterClass.ResVersionConfig;
+import emu.grasscutter.net.proto.RegionInfoOuterClass.RegionInfo;
 import emu.grasscutter.server.event.dispatch.QueryAllRegionsEvent;
 import emu.grasscutter.server.event.dispatch.QueryCurrentRegionEvent;
 import emu.grasscutter.server.http.Router;
 import emu.grasscutter.server.http.objects.QueryCurRegionRspJson;
 import emu.grasscutter.utils.Crypto;
+import emu.grasscutter.utils.JsonUtils;
 import emu.grasscutter.utils.Utils;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -24,7 +26,6 @@ import java.security.Signature;
 import java.util.regex.Pattern;
 
 import static emu.grasscutter.config.Configuration.*;
-import static emu.grasscutter.net.proto.QueryRegionListHttpRspOuterClass.QueryRegionListHttpRsp;
 
 /**
  * Handles requests related to region queries.
@@ -53,14 +54,14 @@ public final class DispatchHandler implements Router {
 
         Map<String, Resource> resourceList = new ConcurrentHashMap<>();
         List<String> usedNames = new ArrayList<>(); // List to check for potential naming conflicts.
-        for (var resource : DISPATCH_INFO.resources) {
-            if (usedNames.contains(resource.version)) {
+        for (String version : DISPATCH_INFO.resources.keySet()) {
+            if (usedNames.contains(version)) {
                 Grasscutter.getLogger().error("version name already in use.");
-                return;
+                continue;
             }
-            usedNames.add(resource.version);
+            usedNames.add(version);
 
-            resourceList.put(resource.version, resource);
+            resourceList.put(version, JsonUtils.decode(DISPATCH_INFO.resources.get(version), Resource.class));
         }
 
         List<Region> configuredRegions;
@@ -84,7 +85,7 @@ public final class DispatchHandler implements Router {
         for (var region : configuredRegions) {
             if (usedNames.contains(region.name)) {
                 Grasscutter.getLogger().error("Region name already in use.");
-                return;
+                continue;
             }
             usedNames.add(region.name);
 

@@ -148,7 +148,6 @@ public final class Grasscutter {
         } else if (runMode == ServerRunMode.DISPATCH_ONLY) {
             httpServer.addRouter(SDKHandler.class);
             httpServer.addRouter(GenericHandler.class);
-            httpServer.addRouter(DispatchHandler.class);
             httpServer.addRouter(LogHandler.class);
 
             httpServer.start();
