@@ -13,8 +13,8 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 public enum ActivityType {
     NONE(0),
+    NEW_ACTIVITY_HIDE_AND_SEEK(1504),
     NEW_ACTIVITY_MUSIC_GAME(2202),
-
     ;
 
     private final int value;

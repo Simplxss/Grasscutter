@@ -22,6 +22,7 @@ import emu.grasscutter.game.quest.QuestSystem;
 import emu.grasscutter.game.shop.ShopSystem;
 import emu.grasscutter.game.systems.AnnouncementSystem;
 import emu.grasscutter.game.systems.InventorySystem;
+import emu.grasscutter.game.match.MatchSystem;
 import emu.grasscutter.game.systems.MultiplayerSystem;
 import emu.grasscutter.game.tower.TowerSystem;
 import emu.grasscutter.game.world.World;
@@ -59,6 +60,7 @@ public final class GameServer extends KcpServer {
     private final InventorySystem inventorySystem;
     private final GachaSystem gachaSystem;
     private final ShopSystem shopSystem;
+    private final MatchSystem matchSystem;
     private final MultiplayerSystem multiplayerSystem;
     private final DungeonSystem dungeonSystem;
     private final ExpeditionSystem expeditionSystem;
@@ -102,6 +104,7 @@ public final class GameServer extends KcpServer {
         this.inventorySystem = new InventorySystem(this);
         this.gachaSystem = new GachaSystem(this);
         this.shopSystem = new ShopSystem(this);
+        this.matchSystem = new MatchSystem(this);
         this.multiplayerSystem = new MultiplayerSystem(this);
         this.dungeonSystem = new DungeonSystem(this);
         this.dropSystem = new DropSystem(this);
@@ -212,6 +215,9 @@ public final class GameServer extends KcpServer {
 
         // Tick players.
         this.players.values().forEach(Player::onTick);
+
+        // Tick matchSystem.
+        this.matchSystem.runTasks();
 
         // Tick scheduler.
         this.getScheduler().runTasks();
