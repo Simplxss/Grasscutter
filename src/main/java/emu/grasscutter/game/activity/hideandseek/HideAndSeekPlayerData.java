@@ -1,9 +1,5 @@
 package emu.grasscutter.game.activity.hideandseek;
 
-import emu.grasscutter.data.GameData;
-import emu.grasscutter.data.excels.HideAndSeekAvatarSDData;
-import emu.grasscutter.data.excels.HideAndSeekMatchData;
-import emu.grasscutter.data.excels.HideAndSeekSkillData;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Data;
