@@ -3,6 +3,7 @@ package emu.grasscutter.game.match;
 
 import emu.grasscutter.data.GameData;
 import emu.grasscutter.game.activity.hideandseek.HideAndSeekActivityHandler;
+import emu.grasscutter.game.player.Player;
 import emu.grasscutter.game.props.ActivityType;
 import emu.grasscutter.server.game.BaseGameSystem;
 import emu.grasscutter.server.game.GameServer;
@@ -24,6 +25,7 @@ public class MatchSystem extends BaseGameSystem {
 
     Map<Integer, List<Room>> multiplayerDungeonListMap;
     Map<Integer, List<Room>> singlePlayerDungeonListMap;
+
     Map<Integer, List<Room>> multiplayerGCGListMap;
     Map<Integer, List<Room>> singlePlayerGCGListMap;
 
@@ -48,7 +50,12 @@ public class MatchSystem extends BaseGameSystem {
         // TODO: estimate the match time
         switch (matchType) {
             case MATCH_TYPE_DUNGEON -> {
-                singlePlayerDungeonListMap.computeIfAbsent(dungeonId, roomList -> new ArrayList<>()).add(new Room(session, dungeonId, matchType));
+                if (session.getPlayer().isInMultiplayer())
+                    singlePlayerDungeonListMap.computeIfAbsent(dungeonId, roomList -> new ArrayList<>()).add(new Room(session, dungeonId, matchType));
+                else
+                    multiplayerDungeonListMap.computeIfAbsent(dungeonId, roomList -> new ArrayList<>()).add(
+                        new Room(session, dungeonId, matchType,
+                            session.getPlayer().getWorld().getPlayers().toArray(new emu.grasscutter.game.player.Player[0])));
                 session.send(new PacketPlayerMatchInfoNotify(session.getPlayer().getUid(), dungeonId, 1000, matchType));
             }
             case MATCH_TYPE_GENERAL -> {
@@ -56,22 +63,30 @@ public class MatchSystem extends BaseGameSystem {
                 switch (GameData.getMatchDataMap().get(matchId).getMatchSubType()) {
                     case MATCH_SUB_TYPE_HIDE -> {
                         var playerData = session.getPlayer().getActivityManager().getPlayerActivityDataByActivityType(ActivityType.NEW_ACTIVITY_HIDE_AND_SEEK);
-                        if (playerData.isEmpty()) {
+                        if (playerData.isEmpty())
                             return;
-                        }
-                        var handler = (HideAndSeekActivityHandler) playerData.get().getActivityHandler();
-                        matchParam = handler.getHideAndSeekPlayerData(playerData.get()).getChosenMapList();
+                        matchParam = ((HideAndSeekActivityHandler) playerData.get().getActivityHandler())
+                            .getHideAndSeekPlayerData(playerData.get()).getChosenMapList();
                     }
                     // TODO: add other match type
                     default -> matchParam = new ArrayList<>();
                 }
-                singlePlayerGeneralListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).
-                    add(new Room(session, matchId, matchType,
-                        new HashSet<>(matchParam)));
+                if (session.getPlayer().isInMultiplayer())
+                    singlePlayerGeneralListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).
+                        add(new Room(session, matchId, matchType, new HashSet<>(matchParam)));
+                else
+                    multiplayerGeneralListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).
+                        add(new Room(session, matchId, matchType, new HashSet<>(matchParam),
+                            session.getPlayer().getWorld().getPlayers().toArray(new emu.grasscutter.game.player.Player[0])));
                 session.send(new PacketPlayerMatchInfoNotify(session.getPlayer().getUid(), matchId, matchParam, 1000, matchType));
             }
             case MATCH_TYPE_GCG -> {
-                singlePlayerGCGListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).add(new Room(session, matchId, matchType));
+                if (session.getPlayer().isInMultiplayer())
+                    singlePlayerGCGListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).add(new Room(session, matchId, matchType));
+                else
+                    multiplayerGCGListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).add(
+                        new Room(session, matchId, matchType,
+                            session.getPlayer().getWorld().getPlayers().toArray(new emu.grasscutter.game.player.Player[0])));
                 session.send(new PacketPlayerMatchInfoNotify(session.getPlayer().getUid(), matchId, 1000, matchType));
             }
         }
@@ -82,20 +97,17 @@ public class MatchSystem extends BaseGameSystem {
         if (!WaitingForConfirmMap.containsKey(uid))
             return;
         var room = WaitingForConfirmMap.get(uid);
-        SendMatchConfirmMessage(room, uid, isAgree);
         switch (matchType) {
             case MATCH_TYPE_DUNGEON -> session.send(new PacketPlayerConfirmMatchRsp(isAgree));
             case MATCH_TYPE_GENERAL, MATCH_TYPE_GCG ->
                 session.send(new PacketPlayerConfirmMatchRsp(matchType, room.id, isAgree));
         }
-        SendMatchConfirmMessage(room, uid, isAgree);
-        room.playersConfirmedMap.put(session, isAgree);
+        room.playersConfirmedMap.put(session.getPlayer(), isAgree);
+
         for (var confirmed : room.playersConfirmedMap.values())
             if (!confirmed) return;
-
         SendMatchStopMessage(room, isAgree ? MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CONFIRM : MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CANCEL);
-        room.playersConfirmedMap.forEach((player, confirmed) -> WaitingForConfirmMap.remove(player.getPlayer().getUid()));
-
+        room.playersConfirmedMap.forEach((player, confirmed) -> WaitingForConfirmMap.remove(player.getUid()));
     }
 
     public synchronized void cancelMatch(GameSession session, MatchTypeOuterClass.MatchType matchType) {
@@ -139,19 +151,19 @@ public class MatchSystem extends BaseGameSystem {
         room.playersConfirmedMap.forEach((player, confirmed) -> {
             WaitingForConfirmMap.put(room.hostPlayer.getPlayer().getUid(), room);
             playerList.add(MatchPlayerInfoOuterClass.MatchPlayerInfo.newBuilder()
-                .setPlayerInfo(player.getPlayer().getOnlinePlayerInfo())
+                .setPlayerInfo(player.getSession().getPlayer().getOnlinePlayerInfo())
                 .build());
         });
         room.playersConfirmedMap.forEach((player, confirmed) -> {
             switch (room.matchType) {
                 case MATCH_TYPE_DUNGEON ->
-                    player.send(new PacketPlayerMatchSuccNotify(room.id, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + 30));
+                    player.getSession().send(new PacketPlayerMatchSuccNotify(room.id, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + 30));
                 case MATCH_TYPE_GENERAL -> {
                     var matchData = GameData.getMatchDataMap().get(room.id);
-                    player.send(new PacketPlayerMatchSuccNotify(room.id, room.randomMatchParam, playerList, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + matchData.getConfirmTime(), room.matchType));
+                    player.getSession().send(new PacketPlayerMatchSuccNotify(room.id, room.randomMatchParam, playerList, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + matchData.getConfirmTime(), room.matchType));
                 }
                 case MATCH_TYPE_GCG ->
-                    player.send(new PacketPlayerMatchSuccNotify(playerList, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + 20));
+                    player.getSession().send(new PacketPlayerMatchSuccNotify(playerList, room.hostPlayer.getPlayer().getUid(), Utils.getCurrentSeconds() + 20));
             }
         });
     }
@@ -160,14 +172,14 @@ public class MatchSystem extends BaseGameSystem {
         room.playersConfirmedMap.forEach((player, confirmed) -> {
             switch (room.matchType) {
                 case MATCH_TYPE_GENERAL -> {
-                    player.send(new PacketPlayerGeneralMatchConfirmNotify(room.id, uid, isAgree));
+                    player.getSession().send(new PacketPlayerGeneralMatchConfirmNotify(room.id, uid, isAgree));
                     if (isAgree)
-                        player.send(new PacketPlayerGeneralMatchDismiss(room.id, uid, MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CANCEL));
+                        player.getSession().send(new PacketPlayerGeneralMatchDismiss(room.id, uid, MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CANCEL));
                 }
                 case MATCH_TYPE_GCG -> {
-                    player.send(new PacketPlayerGCGMatchConfirmNotify(room.id, uid, isAgree));
+                    player.getSession().send(new PacketPlayerGCGMatchConfirmNotify(room.id, uid, isAgree));
                     if (!isAgree)
-                        player.send(new PacketPlayerGCGMatchDismissNotify(room.id, uid, MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CANCEL));
+                        player.getSession().send(new PacketPlayerGCGMatchDismissNotify(room.id, uid, MatchReasonOuterClass.MatchReason.MATCH_REASON_PLAYER_CANCEL));
                 }
             }
         });
@@ -175,7 +187,7 @@ public class MatchSystem extends BaseGameSystem {
 
     private void SendMatchStopMessage(Room room, MatchReasonOuterClass.MatchReason reason) {
         room.playersConfirmedMap.forEach((player, confirmed) -> {
-            player.send(new PacketPlayerMatchStopNotify(player.getPlayer().getUid(), reason));
+            player.getSession().send(new PacketPlayerMatchStopNotify(player.getUid(), reason));
         });
     }
 
@@ -199,7 +211,7 @@ public class MatchSystem extends BaseGameSystem {
                         }
                         if (newPlayers.size() >= minLeftCount) {
                             newPlayers.forEach(singlePlayerRoom -> {
-                                room.playersConfirmedMap.put(singlePlayerRoom.hostPlayer, false);
+                                room.playersConfirmedMap.put(singlePlayerRoom.hostPlayer.getPlayer(), false);
 
                                 int randomIndex = new Random().nextInt(matchParam.size());
                                 room.randomMatchParam = (Integer) matchParam.toArray()[randomIndex];
@@ -227,7 +239,7 @@ public class MatchSystem extends BaseGameSystem {
                     if (newPlayers.size() >= minPlayerNum) {
                         newPlayers.forEach(singlePlayerRoom -> {
                             room.playersConfirmedMap = new HashMap<>();
-                            room.playersConfirmedMap.put(singlePlayerRoom.hostPlayer, false);
+                            room.playersConfirmedMap.put(singlePlayerRoom.hostPlayer.getPlayer(), false);
 
                             int randomIndex = new Random().nextInt(matchParam.size());
                             room.randomMatchParam = (Integer) matchParam.toArray()[randomIndex];
@@ -248,7 +260,7 @@ public class MatchSystem extends BaseGameSystem {
         multiplayerRoomList.removeIf(room -> {
             if (singlePlayerRoomList.size() < minPlayerNum - room.playersConfirmedMap.size()) return false;
             while (singlePlayerRoomList.size() > 0 && room.playersConfirmedMap.size() < maxPlayerNum) {
-                room.playersConfirmedMap.put(singlePlayerRoomList.get(0).hostPlayer, false);
+                room.playersConfirmedMap.put(singlePlayerRoomList.get(0).hostPlayer.getPlayer(), false);
                 singlePlayerRoomList.remove(0);
             }
             // waiting for confirm
@@ -262,7 +274,7 @@ public class MatchSystem extends BaseGameSystem {
             room.playersConfirmedMap = new HashMap<>();
             while (singlePlayerRoomList.size() > 0 && room.playersConfirmedMap.size() < maxPlayerNum) {
                 room.playersConfirmedMap = new HashMap<>();
-                room.playersConfirmedMap.put(singlePlayerRoomList.get(0).hostPlayer, false);
+                room.playersConfirmedMap.put(singlePlayerRoomList.get(0).hostPlayer.getPlayer(), false);
                 singlePlayerRoomList.remove(0);
             }
             // waiting for confirm
@@ -315,7 +327,7 @@ public class MatchSystem extends BaseGameSystem {
         public GameSession hostPlayer;
         public Set<Integer> matchParam;
         public int randomMatchParam;
-        public Map<GameSession, Boolean> playersConfirmedMap;
+        public Map<Player, Boolean> playersConfirmedMap;
         public int confirmEndTime;
 
         public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType) {
@@ -324,8 +336,6 @@ public class MatchSystem extends BaseGameSystem {
             this.hostPlayer = hostPlayer;
         }
 
-        // You ask me why I use [] instead of List?
-        // I google for 3 hours to finger out how to use List in the constructor
         public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType, Set<Integer> matchParam) {
             this.id = id;
             this.matchType = matchType;
@@ -333,9 +343,7 @@ public class MatchSystem extends BaseGameSystem {
             this.matchParam = matchParam;
         }
 
-        // You ask me about the result?
-        // As what you see, I give up
-        public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType, GameSession[] players) {
+        public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType, Player[] players) {
             this.id = id;
             this.matchType = matchType;
             this.hostPlayer = hostPlayer;
@@ -345,7 +353,7 @@ public class MatchSystem extends BaseGameSystem {
                 this.playersConfirmedMap.put(player, false);
         }
 
-        public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType, GameSession[] players, Set<Integer> matchParam) {
+        public Room(GameSession hostPlayer, int id, MatchTypeOuterClass.MatchType matchType, Set<Integer> matchParam, Player[] players) {
             this.id = id;
             this.matchType = matchType;
             this.hostPlayer = hostPlayer;

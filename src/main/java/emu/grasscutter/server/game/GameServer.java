@@ -51,7 +51,6 @@ import static emu.grasscutter.utils.Language.translate;
 @Getter
 public final class GameServer extends KcpServer {
     // Game server base
-    private final InetSocketAddress address;
     private final GameServerPacketHandler packetHandler;
     private final Map<Integer, Player> players;
     private final Set<World> worlds;
@@ -79,10 +78,6 @@ public final class GameServer extends KcpServer {
     private ChatSystemHandler chatManager;
 
     public GameServer() {
-        this(getAdapterInetSocketAddress());
-    }
-
-    public GameServer(InetSocketAddress address) {
         DungeonChallenge.initialize();
         EnergyManager.initialize();
         StaminaManager.initialize();
@@ -91,7 +86,6 @@ public final class GameServer extends KcpServer {
         CombineManger.initialize();
 
         // Game Server base
-        this.address = address;
         this.packetHandler = new GameServerPacketHandler(PacketHandler.class);
         this.players = new ConcurrentHashMap<>();
         this.worlds = Collections.synchronizedSet(new HashSet<>());
@@ -144,11 +138,11 @@ public final class GameServer extends KcpServer {
     private static InetSocketAddress getAdapterInetSocketAddress() {
         InetSocketAddress inetSocketAddress;
         if (GAME_INFO.bindAddress.equals("")) {
-            inetSocketAddress=new InetSocketAddress(GAME_INFO.bindPort);
-        }else {
-            inetSocketAddress=new InetSocketAddress(
-                    GAME_INFO.bindAddress,
-                    GAME_INFO.bindPort
+            inetSocketAddress = new InetSocketAddress(GAME_INFO.bindPort);
+        } else {
+            inetSocketAddress = new InetSocketAddress(
+                GAME_INFO.bindAddress,
+                GAME_INFO.bindPort
             );
         }
         return inetSocketAddress;
@@ -247,7 +241,9 @@ public final class GameServer extends KcpServer {
         channelConfig.setUseConvChannel(true);
         channelConfig.setAckNoDelay(false);
 
-        this.init(GameSessionManager.getListener(),channelConfig,address);
+        var address = getAdapterInetSocketAddress();
+
+        this.init(GameSessionManager.getListener(), channelConfig, address);
 
         // Schedule game loop.
         Timer gameLoop = new Timer();
@@ -268,7 +264,8 @@ public final class GameServer extends KcpServer {
     }
 
     public void onServerShutdown() {
-        ServerStopEvent event = new ServerStopEvent(ServerEvent.Type.GAME, OffsetDateTime.now()); event.call();
+        ServerStopEvent event = new ServerStopEvent(ServerEvent.Type.GAME, OffsetDateTime.now());
+        event.call();
 
         // Kick and save all players
         List<Player> list = new ArrayList<>(this.getPlayers().size());

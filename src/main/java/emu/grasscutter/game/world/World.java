@@ -108,7 +108,7 @@ public class World implements Iterable<Player> {
             return scene;
         }
 
-        // Create scene from scene data if it doesnt exist
+        // Create scene from scene data if it doesn't exist
         SceneData sceneData = GameData.getSceneDataMap().get(sceneId);
         if (sceneData != null) {
             scene = new Scene(this, sceneData);
