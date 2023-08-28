@@ -41,6 +41,7 @@ public final class DungeonManager {
     @Getter private int startSceneTime = 0;
 
     DungeonTrialTeam trialTeam = null;
+    DungeonCandidateTeam candidateTeam = null;
 
     public DungeonManager(@NonNull Scene scene, @NonNull DungeonData dungeonData) {
         this.scene = scene;
@@ -154,9 +155,6 @@ public final class DungeonManager {
 
     public boolean handleCost(Player player, boolean useCondensed) {
         int resinCost = dungeonData.getStatueCostCount() != 0 ? dungeonData.getStatueCostCount() : 20;
-        if (resinCost == 0) {
-            return true;
-        }
         if (useCondensed) {
             // Check if condensed resin is usable here.
             // For this, we use the following logic for now:
