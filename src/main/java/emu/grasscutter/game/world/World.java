@@ -161,7 +161,7 @@ public class World implements Iterable<Player> {
         player.setPeerId(this.getNextPeerId());
         player.getTeamManager().setEntity(new EntityTeam(player));
         // player.getTeamManager().setEntityId(this.getNextEntityId(EntityIdType.TEAM));
-        host.getServer().getMatchSystem().sendMatchInfoMessage(host.getSession(), player);
+        host.getServer().getMatchSystem().sendMatchInfoMessage(host, player);
 
         // Copy main team to multiplayer team
         if (this.isMultiplayer()) {

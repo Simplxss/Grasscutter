@@ -41,16 +41,15 @@ public class MatchSystem extends BaseGameSystem {
     public synchronized void startMatch(GameSession session, int dungeonId, int matchId, MatchTypeOuterClass.MatchType matchType) {
         // TODO: estimate the match time
         var player = session.getPlayer();
+        Room room;
         switch (matchType) {
             case MATCH_TYPE_DUNGEON -> {
-                Room room;
                 if (player.isInMultiplayer())
                     room = new Room(player, dungeonId, matchType,
                         player.getWorld().getPlayers().toArray(new Player[player.getWorld().getPlayerCount()]));
                 else
                     room = new Room(player, dungeonId, matchType);
                 DungeonListMap.computeIfAbsent(dungeonId, roomList -> new ArrayList<>()).add(room);
-                sendMatchInfoMessage(session, room);
             }
             case MATCH_TYPE_GENERAL -> {
                 List<Integer> matchParam;
@@ -66,18 +65,20 @@ public class MatchSystem extends BaseGameSystem {
                 }
                 if (player.isInMultiplayer())
                     return;
-                Room room = new Room(player, matchId, matchType, new HashSet<>(matchParam));
+                room = new Room(player, matchId, matchType, new HashSet<>(matchParam));
                 GeneralListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).add(room);
                 sendMatchInfoMessage(session, room);
             }
             case MATCH_TYPE_GCG -> {
                 if (player.isInMultiplayer())
                     return;
-                Room room = new Room(player, matchId, matchType);
+                room = new Room(player, matchId, matchType);
                 GCGListMap.computeIfAbsent(matchId, roomList -> new ArrayList<>()).add(room);
                 sendMatchInfoMessage(session, room);
             }
+            default -> room = new Room(player);
         }
+        sendMatchInfoMessage(session, room);
     }
 
     public void ConfirmMatch(GameSession session, MatchTypeOuterClass.MatchType matchType, boolean isAgree) {
@@ -179,27 +180,26 @@ public class MatchSystem extends BaseGameSystem {
         }
     }
 
-    public synchronized void sendMatchInfoMessage(GameSession session, Player target) {
-        var player = session.getPlayer();
+    public synchronized void sendMatchInfoMessage(Player host, Player target) {
         for (var room1 : DungeonListMap.values())
             for (var room : room1)
-                if (room.hostPlayer == player) {
-                    sendMatchInfoMessage(session, target, room);
+                if (room.hostPlayer == host) {
+                    sendMatchInfoMessage(host.getSession(), target, room);
                     return;
                 }
         for (var room1 : GeneralListMap.values())
             for (var room : room1)
-                if (room.hostPlayer == player) {
-                    sendMatchInfoMessage(session, target, room);
+                if (room.hostPlayer == host) {
+                    sendMatchInfoMessage(host.getSession(), target, room);
                     return;
                 }
         for (var room1 : GCGListMap.values())
             for (var room : room1)
-                if (room.hostPlayer == player) {
-                    sendMatchInfoMessage(session, target, room);
+                if (room.hostPlayer == host) {
+                    sendMatchInfoMessage(host.getSession(), target, room);
                     return;
                 }
-        sendMatchInfoMessage(session, target, new Room(player));
+        sendMatchInfoMessage(host.getSession(), target, new Room(host));
     }
 
     private synchronized void sendMatchInfoMessage(GameSession session, Room room) {
@@ -388,6 +388,23 @@ public class MatchSystem extends BaseGameSystem {
                         // the next room is the new room[i]
                     } else i++; // if not, move the host to next room
                 }
+            }
+            case MATCH_SUB_TYPE_BRICK_BREAKER -> {
+                for (int i = 0; i < roomList.size() / 2; i++) {
+                    var player1 = roomList.get(2 * i);
+                    var player2 = roomList.get(2 * i + 1);
+
+                    var room = Room.MIN(player1, player2);
+                    room.hostIsMP = true;
+                    room.playersConfirmedMap = new HashMap<>();
+                    room.playersConfirmedMap.put(player1.hostPlayer, 1);
+                    room.playersConfirmedMap.put(player2.hostPlayer, 1);
+
+                    GeneralAndGCGWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+                    SendMatchSuccessMessage(room);
+                }
+                // if one player left, return it
+                return roomList.size() % 2 == 1 ? List.of(roomList.get(roomList.size() - 1)) : List.of();
             }
             default ->
                 throw new IllegalStateException("Not Supported Type: " + GameData.getMatchDataMap().get(id).getMatchSubType());
