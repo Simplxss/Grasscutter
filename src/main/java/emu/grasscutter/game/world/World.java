@@ -35,7 +35,7 @@ public class World implements Iterable<Player> {
     private int nextPeerId = 0;
     private int worldLevel;
 
-    @Getter private boolean isMultiplayer = false;
+    @Getter private boolean isMultiplayer;
     @Getter private boolean timeLocked;
 
     private long lastUpdateTime;
@@ -160,6 +160,7 @@ public class World implements Iterable<Player> {
         player.setPeerId(this.getNextPeerId());
         player.getTeamManager().setEntity(new EntityTeam(player));
         // player.getTeamManager().setEntityId(this.getNextEntityId(EntityIdType.TEAM));
+        host.getServer().getMatchSystem().sendMatchInfoMessage(host, player);
 
         // Copy main team to multiplayer team
         if (this.isMultiplayer()) {
@@ -266,7 +267,7 @@ public class World implements Iterable<Player> {
         scene.removePlayer(player);
 
         // Info packet for other players
-        if (this.getPlayers().size() > 0) {
+        if (!this.getPlayers().isEmpty()) {
             this.updatePlayerInfos(player);
         }
 

@@ -16,6 +16,20 @@ public class MultiplayerSystem extends BaseGameSystem {
         super(server);
     }
 
+    public void enterMp(Player player) {
+        if (player.getWorld().isMultiplayer()) {
+            return;
+        }
+
+        World world = new World(player, true);
+
+        // Add
+        world.addPlayer(player);
+
+        // Rejoin packet
+        player.sendPacket(new PacketPlayerEnterSceneNotify(player, player, EnterType.ENTER_TYPE_SELF, EnterReason.HostFromSingleToMp, player.getScene().getId(), player.getPosition()));
+    }
+
     public void applyEnterMp(Player player, int targetUid) {
         Player target = getServer().getPlayerByUid(targetUid);
         if (target == null) {
@@ -77,16 +91,13 @@ public class MultiplayerSystem extends BaseGameSystem {
         }
 
         // Success
-        if (!hostPlayer.getWorld().isMultiplayer()) {
+        joinPlayer(requester, hostPlayer);
+    }
+
+    public void joinPlayer(Player requester, Player hostPlayer) {
+        if (!hostPlayer.getWorld().isMultiplayer())
             // Player not in multiplayer, create multiplayer world
-            World world = new World(hostPlayer, true);
-
-            // Add
-            world.addPlayer(hostPlayer);
-
-            // Rejoin packet
-            hostPlayer.sendPacket(new PacketPlayerEnterSceneNotify(hostPlayer, hostPlayer, EnterType.ENTER_TYPE_SELF, EnterReason.HostFromSingleToMp, hostPlayer.getScene().getId(), hostPlayer.getPosition()));
-        }
+            enterMp(hostPlayer);
 
         // Set scene pos and id of requester to the host player's
         requester.getPosition().set(hostPlayer.getPosition());
@@ -98,6 +109,7 @@ public class MultiplayerSystem extends BaseGameSystem {
 
         // Packet
         requester.sendPacket(new PacketPlayerEnterSceneNotify(requester, hostPlayer, EnterType.ENTER_TYPE_OTHER, EnterReason.TeamJoin, hostPlayer.getScene().getId(), hostPlayer.getPosition()));
+        requester.sendPacket(new PacketPlayerDataNotify(requester.getPlayer()));
     }
 
     public boolean leaveCoop(Player player) {

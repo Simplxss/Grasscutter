@@ -1482,6 +1482,8 @@ public class Player implements PlayerHook, FieldFetch {
             // force to leave the dungeon (inside has a "if")
             this.getServer().getDungeonSystem().exitDungeon(this);
 
+            this.getServer().getMatchSystem().clearMatchOnLogout(this);
+
             // Leave world
             if (this.getWorld() != null) {
                 this.getWorld().removePlayer(this);

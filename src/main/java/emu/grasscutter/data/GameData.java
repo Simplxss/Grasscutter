@@ -318,6 +318,8 @@ public final class GameData {
     @Getter
     private static final Int2ObjectMap<MonsterCurveData> monsterCurveDataMap =
             new Int2ObjectOpenHashMap<>();
+            
+    @Getter private static final Int2ObjectMap<MatchData> matchDataMap = new Int2ObjectOpenHashMap<>();
 
     @Getter
     private static final Int2ObjectMap<MonsterData> monsterDataMap = new Int2ObjectOpenHashMap<>();
