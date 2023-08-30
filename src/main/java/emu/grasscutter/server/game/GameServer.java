@@ -15,6 +15,7 @@ import emu.grasscutter.game.home.*;
 import emu.grasscutter.game.managers.cooking.*;
 import emu.grasscutter.game.managers.energy.EnergyManager;
 import emu.grasscutter.game.managers.stamina.StaminaManager;
+import emu.grasscutter.game.match.MatchSystem;
 import emu.grasscutter.game.player.Player;
 import emu.grasscutter.game.quest.QuestSystem;
 import emu.grasscutter.game.shop.ShopSystem;
@@ -59,6 +60,7 @@ public final class GameServer extends KcpServer implements Iterable<Player> {
     private final InventorySystem inventorySystem;
     private final GachaSystem gachaSystem;
     private final ShopSystem shopSystem;
+    private final MatchSystem matchSystem;
     private final MultiplayerSystem multiplayerSystem;
     private final HomeWorldMPSystem homeWorldMPSystem;
     private final DungeonSystem dungeonSystem;
@@ -108,6 +110,7 @@ public final class GameServer extends KcpServer implements Iterable<Player> {
             this.inventorySystem = null;
             this.gachaSystem = null;
             this.shopSystem = null;
+            this.matchSystem = null;
             this.multiplayerSystem = null;
             this.homeWorldMPSystem = null;
             this.dungeonSystem = null;
@@ -157,6 +160,7 @@ public final class GameServer extends KcpServer implements Iterable<Player> {
         this.inventorySystem = new InventorySystem(this);
         this.gachaSystem = new GachaSystem(this);
         this.shopSystem = new ShopSystem(this);
+        this.matchSystem = new MatchSystem(this);
         this.multiplayerSystem = new MultiplayerSystem(this);
         this.homeWorldMPSystem = new HomeWorldMPSystem(this);
         this.dungeonSystem = new DungeonSystem(this);
@@ -288,6 +292,9 @@ public final class GameServer extends KcpServer implements Iterable<Player> {
 
         // Tick players.
         this.players.values().forEach(Player::onTick);
+
+        // Tick matchSystem.
+        this.matchSystem.onTick();
 
         // Tick scheduler.
         this.getScheduler().runTasks();
