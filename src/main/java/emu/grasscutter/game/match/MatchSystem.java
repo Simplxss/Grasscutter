@@ -25,8 +25,8 @@ public class MatchSystem extends BaseGameSystem {
     Map<Integer, List<Room>> GeneralListMap;
     Map<Integer, List<Room>> GCGListMap;
 
-    Map<Integer, Room> DungeonWaitingForConfirmMap;
-    Map<Integer, Room> GeneralAndGCGWaitingForConfirmMap;
+    Map<Player, Room> DungeonWaitingForConfirmMap;
+    Map<Player, Room> GeneralAndGCGWaitingForConfirmMap;
 
     public MatchSystem(GameServer server) {
         super(server);
@@ -57,20 +57,28 @@ public class MatchSystem extends BaseGameSystem {
             return false;
         };
 
-        if (delete.apply(DungeonListMap)) return;
-        if (DungeonWaitingForConfirmMap.containsKey(player.getUid())) {
-            var room = DungeonWaitingForConfirmMap.get(player.getUid());
+        boolean ret = delete.apply(DungeonListMap);
+        if (DungeonWaitingForConfirmMap.containsKey(player)) {
+            var room = DungeonWaitingForConfirmMap.get(player);
             room.playersConfirmedMap.remove(player);
-            DungeonListMap.computeIfAbsent(room.id, roomList -> new ArrayList<>()).add(room);
 
+            // re-add the room to the match list if the original room is full
+            if (room.playersConfirmedMap.size() == 4 - 1)
+                DungeonListMap.computeIfAbsent(room.id, roomList -> new ArrayList<>()).add(room);
+            ret = true;
         }
+        if (ret) return;
+
         if (delete.apply(GeneralListMap)) return;
         if (delete.apply(GCGListMap)) return;
 
-        if (DungeonWaitingForConfirmMap.containsKey(player.getUid())) {
-            var room = DungeonWaitingForConfirmMap.get(player.getUid());
-            room.playersConfirmedMap.remove(player);
-            DungeonListMap.computeIfAbsent(room.id, roomList -> new ArrayList<>()).add(room);
+        if (GeneralAndGCGWaitingForConfirmMap.containsKey(player)) {
+            var room = GeneralAndGCGWaitingForConfirmMap.get(player);
+            SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CANCEL);
+
+            for (var entry : room.playersConfirmedMap.entrySet())
+                if (entry.getValue() != 0) // not confirmed
+                    GeneralAndGCGWaitingForConfirmMap.remove(entry.getKey());
         }
 
     }
@@ -121,18 +129,18 @@ public class MatchSystem extends BaseGameSystem {
         var player = session.getPlayer();
         switch (matchType) {
             case MATCH_TYPE_DUNGEON -> {
-                if (DungeonWaitingForConfirmMap.containsKey(session.getPlayer().getUid())) {
-                    var room = DungeonWaitingForConfirmMap.get(session.getPlayer().getUid());
+                if (DungeonWaitingForConfirmMap.containsKey(player)) {
+                    var room = DungeonWaitingForConfirmMap.get(player);
+                    DungeonWaitingForConfirmMap.remove(player);
                     session.send(new PacketPlayerConfirmMatchRsp(matchType, room.id, isAgree));
 
                     SendMatchConfirmMessage(room, player.getUid(), isAgree);
                     if (isAgree) {
-                        session.send(new PacketPlayerMatchStopNotify(player.getUid(), MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CONFIRM));
                         room.playersConfirmedMap.put(player, 0);
+                        session.send(new PacketPlayerMatchStopNotify(player.getUid(), MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CONFIRM));
 
                         // room is full
                         if (room.playersConfirmedMap.size() == 4) {
-                            DungeonWaitingForConfirmMap.remove(session.getPlayer().getUid());
                             for (var confirmed : room.playersConfirmedMap.values())
                                 if (confirmed != 0) return;
                             // all confirmed
@@ -144,30 +152,25 @@ public class MatchSystem extends BaseGameSystem {
                         // add the room to the match list
                         if (room.playersConfirmedMap.size() == 4 - 1)
                             DungeonListMap.computeIfAbsent(room.id, roomList -> new ArrayList<>()).add(room);
-
-                        DungeonWaitingForConfirmMap.remove(session.getPlayer().getUid());
-                        SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CANCEL);
                     }
                 }
             }
             case MATCH_TYPE_GENERAL, MATCH_TYPE_GCG -> {
-                for (var itr = GeneralAndGCGWaitingForConfirmMap.entrySet().iterator(); itr.hasNext(); ) {
-                    var room = itr.next().getValue();
-                    if (room.playersConfirmedMap.containsKey(player)) {
-                        session.send(new PacketPlayerConfirmMatchRsp(matchType, room.id, isAgree));
+                if (GeneralAndGCGWaitingForConfirmMap.containsKey(player)) {
+                    var room = GeneralAndGCGWaitingForConfirmMap.get(player);
+                    GeneralAndGCGWaitingForConfirmMap.remove(player);
 
-                        SendMatchConfirmMessage(room, player.getUid(), isAgree);
-                        if (isAgree) {
-                            room.playersConfirmedMap.put(player, 0);
+                    session.send(new PacketPlayerConfirmMatchRsp(matchType, room.id, isAgree));
 
-                            for (var confirmed : room.playersConfirmedMap.values())
-                                if (confirmed != 0) return;
-                            SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_FINISH);
-                        } else
-                            SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CANCEL);
-                        itr.remove();
-                        return;
-                    }
+                    SendMatchConfirmMessage(room, player.getUid(), isAgree);
+                    if (isAgree) {
+                        room.playersConfirmedMap.put(player, 0);
+
+                        for (var confirmed : room.playersConfirmedMap.values())
+                            if (confirmed != 0) return;
+                        SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_FINISH);
+                    } else
+                        SendMatchStopMessage(room, MatchReasonOuterClass.MatchReason.MATCH_PLAYER_CANCEL);
                 }
             }
             default -> throw new IllegalStateException("Not Supported Type: " + matchType);
@@ -329,8 +332,8 @@ public class MatchSystem extends BaseGameSystem {
                 int confirmEndTime = Utils.getCurrentSeconds() + 30;
                 room.playersConfirmedMap.put(tmpRoom.hostPlayer, confirmEndTime);
 
-                // update the waiting for confirm list
-                DungeonWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+                // add to the waiting for confirm list
+                room.addRoomToConfirmingMap(DungeonWaitingForConfirmMap);
 
                 // send the confirmation to the player
                 tmpRoom.hostPlayer.sendPacket(new PacketPlayerMatchSuccNotify(room.id, room.hostPlayer.getUid(), confirmEndTime));
@@ -357,7 +360,9 @@ public class MatchSystem extends BaseGameSystem {
             room.playersConfirmedMap.put(players[2].hostPlayer, 1);
             room.playersConfirmedMap.put(players[3].hostPlayer, 1);
 
-            DungeonWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+            room.playersConfirmedMap.put(room.hostPlayer, 0); // the host is auto confirmed
+
+            room.addRoomToConfirmingMap(DungeonWaitingForConfirmMap);
             SendMatchSuccessMessage(room);
         }
         // if there is no singlePlayer match, return
@@ -372,9 +377,10 @@ public class MatchSystem extends BaseGameSystem {
         room.playersConfirmedMap = new HashMap<>();
         for (int j = 0; j < i; j++)
             room.playersConfirmedMap.put(players[j].hostPlayer, 1);
+        room.playersConfirmedMap.put(room.hostPlayer, 0); // the host is auto confirmed
 
         newRoomList.add(room);
-        DungeonWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+        room.addRoomToConfirmingMap(DungeonWaitingForConfirmMap);
         SendMatchSuccessMessage(room);
         return newRoomList;
     }
@@ -411,7 +417,7 @@ public class MatchSystem extends BaseGameSystem {
                         for (int j : players.keySet())
                             roomList.remove(j);
 
-                        GeneralAndGCGWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+                        room.addRoomToConfirmingMap(GeneralAndGCGWaitingForConfirmMap);
                         SendMatchSuccessMessage(room);
 
                         // keep i unchanged because the room[i] has been removed
@@ -430,7 +436,7 @@ public class MatchSystem extends BaseGameSystem {
                     room.playersConfirmedMap.put(player1.hostPlayer, 1);
                     room.playersConfirmedMap.put(player2.hostPlayer, 1);
 
-                    GeneralAndGCGWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+                    room.addRoomToConfirmingMap(GeneralAndGCGWaitingForConfirmMap);
                     SendMatchSuccessMessage(room);
                 }
                 // if one player left, return it
@@ -453,7 +459,7 @@ public class MatchSystem extends BaseGameSystem {
             room.playersConfirmedMap.put(player1.hostPlayer, 1);
             room.playersConfirmedMap.put(player2.hostPlayer, 1);
 
-            GeneralAndGCGWaitingForConfirmMap.put(room.hostPlayer.getUid(), room);
+            room.addRoomToConfirmingMap(GeneralAndGCGWaitingForConfirmMap);
             SendMatchSuccessMessage(room);
         }
         // if one player left, return it
@@ -541,6 +547,12 @@ public class MatchSystem extends BaseGameSystem {
         // return the room with the lower world level
         public static Room MIN(Room A, Room B) {
             return A.hostPlayer.getWorldLevel() < B.hostPlayer.getWorldLevel() ? A : B;
+        }
+
+        public void addRoomToConfirmingMap(Map<Player, Room> waitingForConfirmMap) {
+            for (var entry : playersConfirmedMap.entrySet())
+                if (entry.getValue() != 0)
+                    waitingForConfirmMap.put(entry.getKey(), this);
         }
     }
 }
