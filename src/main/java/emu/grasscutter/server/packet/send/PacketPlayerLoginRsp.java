@@ -18,7 +18,7 @@ public class PacketPlayerLoginRsp extends BasePacket {
 
     private static QueryCurrRegionHttpRspOuterClass.QueryCurrRegionHttpRsp regionCache;
 
-    public PacketPlayerLoginRsp(GameSession session) {
+    public PacketPlayerLoginRsp(GameSession session, String gameVersion) {
         super(PacketOpcodes.PlayerLoginRsp, 1);
 
         this.setUseDispatchKey(true);
@@ -47,7 +47,7 @@ public class PacketPlayerLoginRsp extends BasePacket {
 
             info = regionCache.getRegionInfo();
         } else {
-            info = Objects.requireNonNull(RegionHandler.getCurrentRegion()).getRegionInfo();
+            info = Objects.requireNonNull(RegionHandler.getCurrentRegion(gameVersion)).getRegionInfo();
         }
 
         PlayerLoginRsp p =

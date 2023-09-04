@@ -35,9 +35,11 @@ public class ConfigContainer {
      *              HTTP server should start immediately.
      * Version 13 - 'game.useUniquePacketKey' was added to control whether the
      *              encryption key used for packets is a constant or randomly generated.
+     * Version 14 - 'dispatch.regions' 'dispatch.resources' was added to
+     *              support download resources.
      */
     private static int version() {
-        return 13;
+        return 14;
     }
 
     /**
@@ -209,7 +211,9 @@ public class ConfigContainer {
 
     public static class Dispatch {
         /* An array of servers. */
-        public List<Region> regions = List.of();
+        public Region[] regions;
+
+        public JsonObject resources;
 
         /* The URL used to make HTTP requests to the dispatch server. */
         public String dispatchUrl = "ws://127.0.0.1:1111";
@@ -399,19 +403,43 @@ public class ConfigContainer {
 
     @NoArgsConstructor
     public static class Region {
-        public String Name = "os_usa";
-        public String Title = "Grasscutter";
-        public String Ip = "127.0.0.1";
-        public int Port = 22102;
+        public String name = "os_usa";
+        public String title = "Grasscutter";
+        public String ip = "127.0.0.1";
+        public int port = 22102;
+        public boolean isEnableDownloadResource = false;
+        public String[] versions = {"*"};
 
         public Region(
-            String name, String title,
-            String address, int port
+            String address, int port,
+            boolean isEnableDownloadResource
         ) {
-            this.Name = name;
-            this.Title = title;
-            this.Ip = address;
-            this.Port  = port;
+            this.ip = address;
+            this.port = port;
+            this.isEnableDownloadResource = isEnableDownloadResource;
         }
+    }
+
+    public static class Resource {
+        public String resourceUrl = "";
+        public String dataUrl = "";
+        public String resourceUrlBak = "";
+        public int clientDataVersion = 0;
+        public int clientSilenceDataVersion = 0;
+        public String clientDataMd5 = "";
+        public String clientSilenceDataMd5 = "";
+        public ResVersionConfig resVersionConfig = new ResVersionConfig();
+        public String clientVersionSuffix = "";
+        public String clientSilenceVersionSuffix = "";
+        public String nextResourceUrl = "";
+        public ResVersionConfig nextResVersionConfig = new ResVersionConfig();
+    }
+
+    public static class ResVersionConfig {
+        public int version = 0;
+        public String md5 = "";
+        public String releaseTotalSize = "";
+        public String versionSuffix = "";
+        public String branch = "";
     }
 }

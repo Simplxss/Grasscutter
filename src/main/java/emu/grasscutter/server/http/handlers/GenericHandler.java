@@ -10,21 +10,6 @@ import io.javalin.http.Context;
 
 /** Handles all generic, hard-coded responses. */
 public final class GenericHandler implements Router {
-    private static void serverStatus(Context ctx) {
-        int playerCount = Grasscutter.getGameServer().getPlayers().size();
-        int maxPlayer = ACCOUNT.maxPlayer;
-        String version = GameConstants.VERSION;
-
-        ctx.result(
-                "{\"retcode\":0,\"status\":{\"playerCount\":"
-                        + playerCount
-                        + ",\"maxPlayer\":"
-                        + maxPlayer
-                        + ",\"version\":\""
-                        + version
-                        + "\"}}");
-    }
-
     @Override
     public void applyRoutes(Javalin javalin) {
         // hk4e-sdk-os.hoyoverse.com
@@ -77,7 +62,5 @@ public final class GenericHandler implements Router {
 
         // webstatic-sea.hoyoverse.com
         javalin.get("/admin/mi18n/plat_oversea/*", new WebStaticVersionResponse());
-
-        javalin.get("/status/server", GenericHandler::serverStatus);
     }
 }

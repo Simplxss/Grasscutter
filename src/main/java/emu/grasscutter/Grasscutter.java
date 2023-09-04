@@ -140,6 +140,8 @@ public final class Grasscutter {
             httpServer.addRouter(DocumentationServerHandler.class);
             httpServer.addRouter(HandbookHandler.class);
         }
+        if (runMode == ServerRunMode.HYBRID)
+            httpServer.addRouter(StatusHandler.class);
 
         // Check if the HTTP server should start.
         var started = config.server.http.startImmediately;
