@@ -16,39 +16,12 @@ import java.util.Objects;
 
 public class PacketPlayerLoginRsp extends BasePacket {
 
-    private static QueryCurrRegionHttpRspOuterClass.QueryCurrRegionHttpRsp regionCache;
-
     public PacketPlayerLoginRsp(GameSession session, String gameVersion) {
         super(PacketOpcodes.PlayerLoginRsp, 1);
 
         this.setUseDispatchKey(true);
 
-        RegionInfo info;
-
-        if (Grasscutter.getRunMode() == ServerRunMode.GAME_ONLY) {
-            if (regionCache == null) {
-                try {
-                    // todo: we might want to push custom config to client
-                    RegionInfo serverRegion =
-                            RegionInfo.newBuilder()
-                                    .setGateserverIp(lr(GAME_INFO.accessAddress, GAME_INFO.bindAddress))
-                                    .setGateserverPort(lr(GAME_INFO.accessPort, GAME_INFO.bindPort))
-                                    .build();
-
-                    regionCache =
-                            QueryCurrRegionHttpRspOuterClass.QueryCurrRegionHttpRsp.newBuilder()
-                                    .setRegionInfo(serverRegion)
-                                    .setClientSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
-                                    .build();
-                } catch (Exception e) {
-                    Grasscutter.getLogger().error("Error while initializing region cache!", e);
-                }
-            }
-
-            info = regionCache.getRegionInfo();
-        } else {
-            info = Objects.requireNonNull(RegionHandler.getCurrentRegion(gameVersion)).getRegionInfo();
-        }
+        RegionInfo info = RegionHandler.getCurrentRegion(gameVersion).getRegionInfo();
 
         PlayerLoginRsp p =
                 PlayerLoginRsp.newBuilder()

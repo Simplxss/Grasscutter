@@ -57,16 +57,10 @@ public final class RegionHandler implements Router {
                 + lr(HTTP_INFO.accessPort, HTTP_INFO.bindPort);
 
         Map<String, Resource> resourceList = new ConcurrentHashMap<>();
-        List<String> usedNames = new ArrayList<>(); // List to check for potential naming conflicts.
-        for (String version : DISPATCH_INFO.resources.keySet()) {
-            if (usedNames.contains(version)) {
-                Grasscutter.getLogger().error("version name already in use.");
-                continue;
+        if (DISPATCH_INFO.resources != null)
+            for (String version : DISPATCH_INFO.resources.keySet()) {
+                resourceList.put(version, JsonUtils.decode(DISPATCH_INFO.resources.get(version), Resource.class));
             }
-            usedNames.add(version);
-
-            resourceList.put(version, JsonUtils.decode(DISPATCH_INFO.resources.get(version), Resource.class));
-        }
 
         List<Region> configuredRegions;
         if (SERVER.runMode == ServerRunMode.DISPATCH_ONLY) {
@@ -76,14 +70,21 @@ public final class RegionHandler implements Router {
                 System.exit(1);
             }
         } else {
+            // Not dispatch only, so we need to create a region for each game server.
             configuredRegions = List.of(new Region(
-                lr(GAME_INFO.accessAddress, GAME_INFO.bindAddress),
-                lr(GAME_INFO.accessPort, GAME_INFO.bindPort),
-                !resourceList.isEmpty()));
+                    "os_usa", DISPATCH_INFO.defaultName,
+                    lr(GAME_INFO.accessAddress, GAME_INFO.bindAddress),
+                    lr(GAME_INFO.accessPort, GAME_INFO.bindPort),
+                    "OS.*" + GameConstants.VERSION_REGEX),
+                new Region(
+                    "cn_gf01", DISPATCH_INFO.defaultName,
+                    lr(GAME_INFO.accessAddress, GAME_INFO.bindAddress),
+                    lr(GAME_INFO.accessPort, GAME_INFO.bindPort),
+                    "CN.*" + GameConstants.VERSION_REGEX));
         }
 
-        usedNames.clear();
         Map<String, List<Region>> versionRegionMap = new HashMap<>(); // version -> region
+        List<String> usedNames = new ArrayList<>(); // List to check for potential naming conflicts.
         for (var region : configuredRegions) {
             if (usedNames.contains(region.name)) {
                 Grasscutter.getLogger().error("Region name already in use.");
@@ -100,43 +101,53 @@ public final class RegionHandler implements Router {
                     .setGateserverPort(region.port);
 
                 // Add resource download info if exist
-                if (resourceList.containsKey(version) && region.isEnableDownloadResource) {
-                    var resource = resourceList.get(version);
-                    regionInfo.setResourceUrl(resource.resourceUrl)
-                        .setDataUrl(resource.dataUrl)
-                        .setResourceUrlBak(resource.resourceUrlBak)
-                        .setClientDataVersion(resource.clientDataVersion)
-                        .setClientSilenceDataVersion(resource.clientSilenceDataVersion)
-                        .setClientDataMd5(resource.clientDataMd5)
-                        .setClientSilenceDataMd5(resource.clientSilenceDataMd5)
-                        .setResVersionConfig(ResVersionConfig.newBuilder()
-                            .setVersion(resource.resVersionConfig.version)
-                            .setMd5(resource.resVersionConfig.md5)
-                            .setReleaseTotalSize(resource.resVersionConfig.releaseTotalSize)
-                            .setVersionSuffix(resource.resVersionConfig.versionSuffix)
-                            .setBranch(resource.resVersionConfig.branch)
-                            .build())
-                        .setClientVersionSuffix(resource.clientVersionSuffix)
-                        .setClientSilenceVersionSuffix(resource.clientSilenceVersionSuffix)
-                        .setNextResourceUrl(resource.nextResourceUrl)
-                        .setNextResVersionConfig(ResVersionConfig.newBuilder()
-                            .setVersion(resource.nextResVersionConfig.version)
-                            .setMd5(resource.nextResVersionConfig.md5)
-                            .setReleaseTotalSize(resource.nextResVersionConfig.releaseTotalSize)
-                            .setVersionSuffix(resource.nextResVersionConfig.versionSuffix)
-                            .setBranch(resource.nextResVersionConfig.branch)
-                            .build());
-                }
+                if (region.isEnableDownloadResource)
+                    resourceList.keySet().stream().filter(key -> key.matches(version)).toList().forEach(key -> {
+                        var resource = resourceList.get(key);
+                        var tempRegionInfo = regionInfo.clone()
+                            .setResourceUrl(resource.resourceUrl)
+                            .setDataUrl(resource.dataUrl)
+                            .setResourceUrlBak(resource.resourceUrlBak)
+                            .setClientDataVersion(resource.clientDataVersion)
+                            .setClientSilenceDataVersion(resource.clientSilenceDataVersion)
+                            .setClientDataMd5(resource.clientDataMd5)
+                            .setClientSilenceDataMd5(resource.clientSilenceDataMd5)
+                            .setResVersionConfig(ResVersionConfig.newBuilder()
+                                .setVersion(resource.resVersionConfig.version)
+                                .setMd5(resource.resVersionConfig.md5)
+                                .setReleaseTotalSize(resource.resVersionConfig.releaseTotalSize)
+                                .setVersionSuffix(resource.resVersionConfig.versionSuffix)
+                                .setBranch(resource.resVersionConfig.branch)
+                                .build())
+                            .setClientVersionSuffix(resource.clientVersionSuffix)
+                            .setClientSilenceVersionSuffix(resource.clientSilenceVersionSuffix)
+                            .setNextResourceUrl(resource.nextResourceUrl)
+                            .setNextResVersionConfig(ResVersionConfig.newBuilder()
+                                .setVersion(resource.nextResVersionConfig.version)
+                                .setMd5(resource.nextResVersionConfig.md5)
+                                .setReleaseTotalSize(resource.nextResVersionConfig.releaseTotalSize)
+                                .setVersionSuffix(resource.nextResVersionConfig.versionSuffix)
+                                .setBranch(resource.nextResVersionConfig.branch)
+                                .build());
+
+                        // Create an updated region query.
+                        var updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
+                            .setRegionInfo(tempRegionInfo.build())
+                            .setClientSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
+                            .build();
+
+                        regions.computeIfAbsent(region.name, k -> new ConcurrentHashMap<>())
+                            .put(key.replace(".", "\\."), new RegionData(updatedQuery)); // Only add if not exist(for version contains wildcard)
+                    });
+
                 // Create an updated region query.
-                var updatedQuery =
-                    QueryCurrRegionHttpRsp.newBuilder()
-                        .setRegionInfo(regionInfo.build())
-                        .setClientSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
-                        .build();
+                var updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
+                    .setRegionInfo(regionInfo.build())
+                    .setClientSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
+                    .build();
 
                 regions.computeIfAbsent(region.name, k -> new ConcurrentHashMap<>())
-                    .put(version, new RegionData(updatedQuery));
-
+                    .putIfAbsent(version, new RegionData(updatedQuery));
             }
         }
 
@@ -146,7 +157,9 @@ public final class RegionHandler implements Router {
             List<RegionSimpleInfo> servers = new ArrayList<>();
 
             regionList.forEach(region -> servers.add(RegionSimpleInfo.newBuilder()
-                .setName(region.name).setTitle(region.title).setType("DEV_PUBLIC")
+                .setName(region.name)
+                .setTitle(region.title)
+                .setType("DEV_PUBLIC")
                 .setDispatchUrl(dispatchDomain + "/query_cur_region/" + region.name)
                 .build()));
 
@@ -158,10 +171,11 @@ public final class RegionHandler implements Router {
 
             // Create a config object.
             var customConfig = new JsonObject();
-            if (version.startsWith("OS"))
-                customConfig.addProperty("sdkenv", "2");
-            else if (version.startsWith("CN"))
+            if (version.startsWith("CN"))
                 customConfig.addProperty("sdkenv", "0");
+            else
+                // default os
+                customConfig.addProperty("sdkenv", "2");
 
             customConfig.addProperty("checkdevice", "false");
             customConfig.addProperty("loadPatch", "false");
@@ -214,9 +228,13 @@ public final class RegionHandler implements Router {
             // Respond with the event result.
             ctx.result(event.getRegionList());
             logger.info(String.format("[Dispatch] Client %s with no version request: query_region_list", ctx.ip()));
+            return;
         }
 
+
+        List<String> matches;
         if (regionLists.containsKey(versionName)) {
+            // First match certain version.
             // Invoke event.
             QueryAllRegionsEvent event = new QueryAllRegionsEvent(regionLists.get(versionName));
             event.call();
@@ -225,15 +243,18 @@ public final class RegionHandler implements Router {
 
             // Log to console.
             logger.info(String.format("[Dispatch] Client %s version %s request: query_region_list", ctx.ip(), versionName));
-        } else if (regionLists.containsKey("*")) {
+        } else if (!(matches = regionLists.keySet()
+            .stream().filter(versionName::matches).toList())
+            .isEmpty()) {
+            // Then match all versions.
             // Invoke event.
-            QueryAllRegionsEvent event = new QueryAllRegionsEvent(regionLists.get("*"));
+            QueryAllRegionsEvent event = new QueryAllRegionsEvent(regionLists.get(matches.get(0)));
             event.call();
             // Respond with event result.
             ctx.result(event.getRegionList());
 
             // Log to console.
-            logger.info(String.format("[Dispatch] Client %s version %s match * request: query_region_list", ctx.ip(), versionName));
+            logger.info(String.format("[Dispatch] Client %s version %s match %s request: query_region_list", ctx.ip(), versionName, matches.get(0)));
         } else {
             // no version info
             String regionListResponse = "CP///////////wE=";
@@ -267,15 +288,21 @@ public final class RegionHandler implements Router {
             return;
         }
 
+        if (!regions.containsKey(regionName)) {
+            ctx.status(400);
+            Grasscutter.getLogger().info(String.format("[Dispatch] Client %s version %s request not exist region: query_cur_region/%s", ctx.ip(), versionName, regionName));
+            return;
+        }
+
         // Get region data.
         String regionData = null;
-        if (regions.containsKey(regionName)) {
-            if (regions.get(regionName).containsKey(versionName)) {
-                regionData = regions.get(regionName).get(versionName).getBase64();
-            } else if (regions.get(regionName).containsKey("*")) {
-                regionData = regions.get(regionName).get("*").getBase64();
-            } else
-                Grasscutter.getLogger().info(String.format("[Dispatch] Client %s version %s matches none request: query_cur_region/%s", ctx.ip(), versionName, regionName));
+        List<String> matches;
+        if (regions.get(regionName).containsKey(versionName)) {
+            regionData = regions.get(regionName).get(versionName).getBase64();
+        } else if (!(matches = regions.get(regionName).keySet()
+            .stream().filter(versionName::matches).toList())
+            .isEmpty()) {
+            regionData = regions.get(regionName).get(matches.get(0)).getBase64();
         } else
             Grasscutter.getLogger().info(String.format("[Dispatch] Client %s version %s matches none request: query_cur_region/%s", ctx.ip(), versionName, regionName));
 
@@ -290,36 +317,32 @@ public final class RegionHandler implements Router {
             || (versionMajor == 2 && versionMinor == 7 && versionFix >= 50)
             || (versionMajor == 2 && versionMinor == 8)) {
             try {
-                QueryCurrentRegionEvent event = new QueryCurrentRegionEvent(regionData);
-                event.call();
-
                 if (regionData == null) { // Reject clients when there is a version mismatch
-
-                    boolean updateClient = GameConstants.VERSION.compareTo(clientVersion) > 0;
-
-                    QueryCurrRegionHttpRsp rsp =
-                        QueryCurrRegionHttpRsp.newBuilder()
-                            .setRetcode(Retcode.RET_STOP_SERVER_VALUE)
-                            .setMsg("Connection Failed!")
-                            .setRegionInfo(RegionInfo.newBuilder())
-                            .setStopServer(
-                                StopServerInfo.newBuilder()
-                                    .setUrl("https://discord.gg/T5vZU6UyeG")
-                                    .setStopBeginTime((int) Instant.now().getEpochSecond())
-                                    .setStopEndTime((int) Instant.now().getEpochSecond() + 1)
-                                    .setContentMsg("No match found for your client version.")
-                                    .build())
-                            .buildPartial();
+                    QueryCurrRegionHttpRsp rsp = QueryCurrRegionHttpRsp.newBuilder()
+                        .setRetcode(Retcode.RET_STOP_SERVER_VALUE)
+                        .setMsg("Connection Failed!")
+                        .setRegionInfo(RegionInfo.newBuilder())
+                        .setStopServer(
+                            StopServerInfo.newBuilder()
+                                .setUrl("https://discord.gg/T5vZU6UyeG")
+                                .setStopBeginTime((int) Instant.now().getEpochSecond())
+                                .setStopEndTime((int) Instant.now().getEpochSecond() + 1)
+                                .setContentMsg("No match found for your client version.")
+                                .build())
+                        .buildPartial();
 
                     Grasscutter.getLogger()
                         .debug(
                             String.format(
-                                "Connection denied for %s due to %s.",
-                                Utils.address(ctx), updateClient ? "outdated client!" : "outdated server!"));
+                                "Connection denied for %s due to no server match.",
+                                Utils.address(ctx)));
 
                     ctx.json(Crypto.encryptAndSignRegionData(rsp.toByteArray(), key_id));
                     return;
                 }
+
+                QueryCurrentRegionEvent event = new QueryCurrentRegionEvent(regionData);
+                event.call();
 
                 if (ctx.queryParam("dispatchSeed") == null) {
                     // More love for UA Patch players
@@ -372,21 +395,17 @@ public final class RegionHandler implements Router {
     public static QueryCurrRegionHttpRsp getCurrentRegion(String gameVersion) {
         return switch (SERVER.runMode) {
             case HYBRID, GAME_ONLY -> {
-                if (regions.get("os_usa").containsKey(gameVersion)) {
-                    yield regions.get("os_usa").get(gameVersion).getRegionQuery();
-                } else if (regions.get("os_usa").containsKey("*")) {
-                    yield regions.get("os_usa").get("*").getRegionQuery();
-                } else {
-                    // shouldn't occur, but in case...
-                    RegionInfo serverRegion = RegionInfo.newBuilder()
-                        .setGateserverIp(lr(GAME_INFO.accessAddress, GAME_INFO.bindAddress))
-                        .setGateserverPort(lr(GAME_INFO.accessPort, GAME_INFO.bindPort))
-                        .setSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
-                        .build();
-
-                    Grasscutter.getLogger().info("[Dispatch] getCurrentRegion matches ???");
-                    yield QueryCurrRegionHttpRsp.newBuilder().setRegionInfo(serverRegion).build();
-                }
+                if (gameVersion.startsWith("CN"))
+                    if (regions.get("cn_gf01").containsKey(gameVersion))
+                        yield regions.get("cn_gf01").get(gameVersion).getRegionQuery();
+                    else
+                        yield regions.get("cn_gf01").get("CN.*" + GameConstants.VERSION_REGEX).getRegionQuery();
+                else if (gameVersion.startsWith("OS"))
+                    if (regions.get("os_usa").containsKey(gameVersion))
+                        yield regions.get("os_usa").get(gameVersion).getRegionQuery();
+                    else
+                        yield regions.get("os_usa").get("OS.*" + GameConstants.VERSION_REGEX).getRegionQuery();
+                else throw new UnsupportedOperationException("Unknown game version.");
             }
             case DISPATCH_ONLY ->
                 throw new UnsupportedOperationException("Dispatch-only mode does not support this operation.");

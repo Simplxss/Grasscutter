@@ -52,7 +52,8 @@ public class ConfigContainer {
                 Grasscutter.getLogger().info("Updating legacy config...");
                 Grasscutter.saveConfig(null);
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
 
         var existing = config.version;
         var latest = version();
@@ -70,7 +71,8 @@ public class ConfigContainer {
             } catch (Exception exception) {
                 Grasscutter.getLogger().error("Failed to update a configuration field.", exception);
             }
-        }); updated.version = version();
+        });
+        updated.version = version();
 
         try { // Save configuration and reload.
             Grasscutter.saveConfig(updated);
@@ -197,13 +199,13 @@ public class ConfigContainer {
         public JoinOptions joinOptions = new JoinOptions();
         public ConsoleAccount serverAccount = new ConsoleAccount();
 
-        public VisionOptions[] visionOptions = new VisionOptions[] {
-            new VisionOptions("VISION_LEVEL_NORMAL"         , 80    , 20),
-            new VisionOptions("VISION_LEVEL_LITTLE_REMOTE"  , 16    , 40),
-            new VisionOptions("VISION_LEVEL_REMOTE"         , 1000  , 250),
-            new VisionOptions("VISION_LEVEL_SUPER"          , 4000  , 1000),
-            new VisionOptions("VISION_LEVEL_NEARBY"         , 40    , 20),
-            new VisionOptions("VISION_LEVEL_SUPER_NEARBY"   , 20    , 20)
+        public VisionOptions[] visionOptions = new VisionOptions[]{
+            new VisionOptions("VISION_LEVEL_NORMAL", 80, 20),
+            new VisionOptions("VISION_LEVEL_LITTLE_REMOTE", 16, 40),
+            new VisionOptions("VISION_LEVEL_REMOTE", 1000, 250),
+            new VisionOptions("VISION_LEVEL_SUPER", 4000, 1000),
+            new VisionOptions("VISION_LEVEL_NEARBY", 40, 20),
+            new VisionOptions("VISION_LEVEL_SUPER_NEARBY", 20, 20)
         };
     }
 
@@ -370,12 +372,12 @@ public class ConfigContainer {
         public static class Mail {
             public String title = "Welcome to Grasscutter!";
             public String content = """
-                    Hi there!\r
-                    First of all, welcome to Grasscutter. If you have any issues, please let us know so that Lawnmower can help you! \r
-                    \r
-                    Check out our:\r
-                    <type="browser" text="Discord" href="https://discord.gg/T5vZU6UyeG"/>
-                    """;
+                Hi there!\r
+                First of all, welcome to Grasscutter. If you have any issues, please let us know so that Lawnmower can help you! \r
+                \r
+                Check out our:\r
+                <type="browser" text="Discord" href="https://discord.gg/T5vZU6UyeG"/>
+                """;
             public String sender = "Lawnmower";
             public emu.grasscutter.game.mail.Mail.MailItem[] items = {
                 new emu.grasscutter.game.mail.Mail.MailItem(13509, 1, 1),
@@ -403,20 +405,28 @@ public class ConfigContainer {
 
     @NoArgsConstructor
     public static class Region {
+        // Make preview config happy
+        @SerializedName(value = "name", alternate = "Name")
         public String name = "os_usa";
+        @SerializedName(value = "title", alternate = "Title")
         public String title = "Grasscutter";
+        @SerializedName(value = "ip", alternate = "Ip")
         public String ip = "127.0.0.1";
+        @SerializedName(value = "port", alternate = "Port")
         public int port = 22102;
-        public boolean isEnableDownloadResource = false;
-        public String[] versions = {"*"};
+        public boolean isEnableDownloadResource = true;
+        public String[] versions; // regex for matching game versions
 
         public Region(
+            String name, String title,
             String address, int port,
-            boolean isEnableDownloadResource
+            String version
         ) {
+            this.name = name;
+            this.title = title;
             this.ip = address;
             this.port = port;
-            this.isEnableDownloadResource = isEnableDownloadResource;
+            this.versions = new String[]{version};
         }
     }
 
